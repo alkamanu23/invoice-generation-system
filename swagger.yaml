@@ -1,0 +1,2059 @@
+openapi: 3.0.0
+info:
+  title: UBL API
+  version: 2.0.0
+  description: >
+    API for generating and managing UBL documents including invoices, application
+    responses, and adjustment notes. Version 2 adds filter endpoints for
+    querying resources by date range, party IDs, and document type.
+
+servers:
+  - url: https://seng2021-w13a-alligator.onrender.com
+    description: Production server (Render)
+  - url: http://127.0.0.1:3200
+    description: Local development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+
+    TaxScheme:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        taxTypeCode:
+          type: string
+
+    TaxCategory:
+      type: object
+      properties:
+        id:
+          type: string
+        percent:
+          type: string
+        taxExemptionReasonCode:
+          type: string
+        taxExemptionReason:
+          type: array
+          items:
+            type: string
+        taxScheme:
+          $ref: '#/components/schemas/TaxScheme'
+
+    TaxSubtotal:
+      type: object
+      properties:
+        taxableAmount:
+          type: string
+        taxAmount:
+          type: string
+        percent:
+          type: string
+        taxCategory:
+          $ref: '#/components/schemas/TaxCategory'
+
+    TaxTotal:
+      type: object
+      required:
+        - taxAmount
+      properties:
+        taxAmount:
+          type: string
+        taxIncludedIndicator:
+          type: boolean
+        taxSubtotal:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxSubtotal'
+
+    AllowanceCharge:
+      type: object
+      required:
+        - chargeIndicator
+        - amount
+        - taxCategory
+      properties:
+        chargeIndicator:
+          type: boolean
+        allowanceChargeReasonCode:
+          type: string
+        allowanceChargeReason:
+          type: array
+          items:
+            type: string
+        amount:
+          type: string
+        taxCategory:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxCategory'
+
+    MonetaryTotal:
+      type: object
+      required:
+        - payableAmount
+      properties:
+        payableAmount:
+          type: string
+        lineExtensionAmount:
+          type: string
+        taxExclusiveAmount:
+          type: string
+        taxInclusiveAmount:
+          type: string
+        allowanceTotalAmount:
+          type: string
+        chargeTotalAmount:
+          type: string
+        prepaidAmount:
+          type: string
+        payableRoundingAmount:
+          type: string
+
+    Address:
+      type: object
+      properties:
+        streetName:
+          type: string
+        additionalStreetName:
+          type: string
+        cityName:
+          type: string
+        postalZone:
+          type: string
+        countrySubentity:
+          type: string
+        country:
+          type: object
+          properties:
+            identificationCode:
+              type: string
+            name:
+              type: string
+
+    Contact:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        telephone:
+          type: string
+        telefax:
+          type: string
+        electronicMail:
+          type: string
+        note:
+          type: array
+          items:
+            type: string
+
+    PartyIdentification:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+
+    PartyName:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+
+    Party:
+      type: object
+      properties:
+        websiteURI:
+          type: string
+        endpointID:
+          type: string
+        partyIdentification:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartyIdentification'
+        partyName:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartyName'
+        postalAddress:
+          $ref: '#/components/schemas/Address'
+        Contact:
+          $ref: '#/components/schemas/Contact'
+
+    PeppolParty:
+      type: object
+      description: Party with Peppol-mandatory fields
+      required:
+        - endpointID
+        - partyName
+        - postalAddress
+      properties:
+        endpointID:
+          type: string
+          description: Peppol endpoint identifier (e.g. 0088:1234567890)
+          example: '0088:1234567890'
+        endpointSchemeID:
+          type: string
+          description: 4-digit scheme ID for the endpoint (defaults to 0088)
+          example: '0088'
+        partyName:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartyName'
+        postalAddress:
+          type: object
+          required:
+            - cityName
+            - country
+          properties:
+            streetName:
+              type: string
+            cityName:
+              type: string
+            postalZone:
+              type: string
+            country:
+              type: object
+              required:
+                - identificationCode
+              properties:
+                identificationCode:
+                  type: string
+                  description: 2-letter ISO country code
+                  example: AU
+
+    CustomerParty:
+      type: object
+      properties:
+        supplierAssignedAccountID:
+          type: string
+        party:
+          $ref: '#/components/schemas/Party'
+        deliveryContact:
+          $ref: '#/components/schemas/Contact'
+        accountingContact:
+          $ref: '#/components/schemas/Contact'
+        buyerContact:
+          $ref: '#/components/schemas/Contact'
+
+    SupplierParty:
+      type: object
+      properties:
+        customerAssignedAccountID:
+          type: string
+        dataSendingCapability:
+          type: string
+        party:
+          $ref: '#/components/schemas/Party'
+        DespatchContact:
+          $ref: '#/components/schemas/Contact'
+        accountingContact:
+          $ref: '#/components/schemas/Contact'
+        sellerContact:
+          $ref: '#/components/schemas/Contact'
+
+    DocumentReference:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+        copyIndicator:
+          type: boolean
+        issueDate:
+          type: string
+        documentTypeCode:
+          type: string
+        documentType:
+          type: string
+
+    Period:
+      type: object
+      properties:
+        startDate:
+          type: string
+        startTime:
+          type: string
+        endDate:
+          type: string
+        endTime:
+          type: string
+
+    PaymentMeans:
+      type: object
+      required:
+        - paymentMeansCode
+      properties:
+        id:
+          type: string
+        paymentMeansCode:
+          type: string
+        paymentDueDate:
+          type: string
+        instructionNote:
+          type: array
+          items:
+            type: string
+        paymentID:
+          type: array
+          items:
+            type: string
+
+    PaymentTerms:
+      type: object
+      properties:
+        id:
+          type: string
+        note:
+          type: array
+          items:
+            type: string
+        PaymentDueDate:
+          type: string
+
+    DeliveryTerms:
+      type: object
+      properties:
+        id:
+          type: string
+        specialTerms:
+          type: array
+          items:
+            type: string
+        amount:
+          type: string
+
+    Delivery:
+      type: object
+      properties:
+        id:
+          type: string
+        actualDeliveryDate:
+          type: string
+        deliveryAddress:
+          $ref: '#/components/schemas/Address'
+
+    ItemIdentification:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+        extendedID:
+          type: string
+
+    Item:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: array
+          items:
+            type: string
+        sellersItemIdentification:
+          $ref: '#/components/schemas/ItemIdentification'
+        buyersItemIdentification:
+          $ref: '#/components/schemas/ItemIdentification'
+        standardItemIdentification:
+          $ref: '#/components/schemas/ItemIdentification'
+        classifiedTaxCategory:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxCategory'
+
+    Price:
+      type: object
+      required:
+        - priceAmount
+      properties:
+        priceAmount:
+          type: string
+        baseQuantity:
+          type: string
+        priceTypeCode:
+          type: string
+        priceType:
+          type: string
+
+    OrderLineReference:
+      type: object
+      required:
+        - lineID
+      properties:
+        lineID:
+          type: string
+        salesOrderLineID:
+          type: string
+
+    InvoiceLine:
+      type: object
+      required:
+        - id
+        - lineExtensionAmount
+        - item
+      properties:
+        id:
+          type: string
+        note:
+          type: array
+          items:
+            type: string
+        invoicedQuantity:
+          type: number
+        lineExtensionAmount:
+          type: string
+        orderLineReference:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLineReference'
+        allowanceCharge:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowanceCharge'
+        taxTotal:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxTotal'
+        item:
+          $ref: '#/components/schemas/Item'
+        price:
+          $ref: '#/components/schemas/Price'
+
+    Invoice:
+      type: object
+      required:
+        - id
+        - issueDate
+        - accountingSupplierParty
+        - accountingCustomerParty
+        - legalMonetaryTotal
+        - invoiceLine
+      properties:
+        id:
+          type: string
+        UUID:
+          type: string
+        issueDate:
+          type: string
+        dueDate:
+          type: string
+        invoiceTypeCode:
+          type: string
+        note:
+          type: array
+          items:
+            type: string
+        documentCurrencyCode:
+          type: string
+        taxCurrencyCode:
+          type: string
+        buyerReference:
+          type: string
+        orderReference:
+          $ref: '#/components/schemas/DocumentReference'
+        accountingSupplierParty:
+          $ref: '#/components/schemas/SupplierParty'
+        accountingCustomerParty:
+          $ref: '#/components/schemas/CustomerParty'
+        delivery:
+          type: array
+          items:
+            $ref: '#/components/schemas/Delivery'
+        paymentMeans:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentMeans'
+        paymentTerms:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentTerms'
+        allowanceCharge:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowanceCharge'
+        taxTotal:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxTotal'
+        legalMonetaryTotal:
+          $ref: '#/components/schemas/MonetaryTotal'
+        invoiceLine:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceLine'
+
+    OrderLineItem:
+      type: object
+      required:
+        - id
+        - item
+      properties:
+        id:
+          type: string
+        item:
+          $ref: '#/components/schemas/Item'
+        quantity:
+          type: string
+        lineExtensionAmount:
+          type: string
+        price:
+          $ref: '#/components/schemas/Price'
+        taxTotal:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxTotal'
+        allowanceCharge:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowanceCharge'
+
+    OrderLine:
+      type: object
+      required:
+        - lineItem
+      properties:
+        lineItem:
+          $ref: '#/components/schemas/OrderLineItem'
+        note:
+          type: array
+          items:
+            type: string
+
+    Order:
+      type: object
+      required:
+        - id
+        - issueDate
+        - buyerCustomerParty
+        - sellerSupplierParty
+        - orderLine
+      properties:
+        id:
+          type: string
+        issueDate:
+          type: string
+        orderTypeCode:
+          type: string
+        note:
+          type: array
+          items:
+            type: string
+        documentCurrencyCode:
+          type: string
+        taxCurrencyCode:
+          type: string
+        customerReference:
+          type: string
+        buyerCustomerParty:
+          $ref: '#/components/schemas/CustomerParty'
+        sellerSupplierParty:
+          $ref: '#/components/schemas/SupplierParty'
+        delivery:
+          type: array
+          items:
+            $ref: '#/components/schemas/Delivery'
+        deliveryTerms:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryTerms'
+        paymentMeans:
+          $ref: '#/components/schemas/PaymentMeans'
+        paymentTerms:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentTerms'
+        allowanceCharge:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowanceCharge'
+        taxTotal:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxTotal'
+        anticipatedMonetaryTotal:
+          $ref: '#/components/schemas/MonetaryTotal'
+        orderLine:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLine'
+
+    PeppolOrder:
+      type: object
+      description: >
+        Order with Peppol-mandatory fields. Extends the standard Order with
+        endpoint IDs required for Peppol compliance (UBL 2.1 / EN16931).
+        The buyer and seller parties must include endpointID, city, and
+        2-letter country code. buyerReference defaults to the order ID if
+        not provided.
+      required:
+        - id
+        - issueDate
+        - documentCurrencyCode
+        - buyerCustomerParty
+        - sellerSupplierParty
+        - orderLine
+      properties:
+        id:
+          type: string
+          example: order-001
+        issueDate:
+          type: string
+          format: date
+          example: '2026-04-21'
+        documentCurrencyCode:
+          type: string
+          description: 3-letter ISO currency code
+          example: AUD
+        buyerReference:
+          type: string
+          description: Buyer purchase order reference. Defaults to order ID if omitted.
+          example: PO-2026-001
+        customerReference:
+          type: string
+          example: REF-001
+        buyerCustomerParty:
+          type: object
+          required:
+            - party
+          properties:
+            party:
+              $ref: '#/components/schemas/PeppolParty'
+        sellerSupplierParty:
+          type: object
+          required:
+            - party
+          properties:
+            party:
+              $ref: '#/components/schemas/PeppolParty'
+        taxTotal:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxTotal'
+        anticipatedMonetaryTotal:
+          $ref: '#/components/schemas/MonetaryTotal'
+        orderLine:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLine'
+
+    ApplicationResponse:
+      type: object
+      properties:
+        responseId:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+
+    AdjustmentLineItem:
+      type: object
+      required:
+        - id
+        - item
+        - quantity
+        - price
+      properties:
+        id:
+          type: string
+        quantity:
+          type: number
+        lineExtensionAmount:
+          type: number
+        price:
+          type: object
+          required:
+            - priceAmount
+          properties:
+            priceAmount:
+              type: number
+        item:
+          type: object
+          required:
+            - name
+            - classifiedTaxCategory
+          properties:
+            name:
+              type: string
+            classifiedTaxCategory:
+              type: array
+              items:
+                $ref: '#/components/schemas/TaxCategory'
+
+    AdjustmentNote:
+      type: object
+      properties:
+        id:
+          type: string
+        issueDate:
+          type: string
+        note:
+          type: array
+          items:
+            type: string
+        legalMonetaryTotal:
+          type: object
+          properties:
+            payableAmount:
+              type: number
+        creditNoteLine:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdjustmentLineItem'
+        debitNoteLine:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdjustmentLineItem'
+
+    AdjustmentNoteSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        issuedate:
+          type: string
+        type:
+          type: string
+          enum:
+            - credit
+            - debit
+
+    UserStats:
+      type: object
+      properties:
+        invoices:
+          type: integer
+          description: Total invoices created by the authenticated user
+        creditNotes:
+          type: integer
+          description: Total credit notes created by the authenticated user
+        debitNotes:
+          type: integer
+          description: Total debit notes created by the authenticated user
+        appResponses:
+          type: integer
+          description: Total app responses created by the authenticated user
+        adjustmentNotes:
+          type: integer
+          description: Total adjustment notes (credit + debit) created by the authenticated user
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ─── Auth ────────────────────────────────────────────────────────────────────
+
+  /v1/auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - email
+                - password
+              properties:
+                username:
+                  type: string
+                  example: johndoe
+                email:
+                  type: string
+                  example: johndoe@example.com
+                password:
+                  type: string
+                  example: Password123!
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Invalid input or username already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/auth/confirm:
+    post:
+      tags:
+        - Auth
+      summary: Confirm user registration with email code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - code
+              properties:
+                username:
+                  type: string
+                  example: johndoe
+                code:
+                  type: string
+                  example: '123456'
+      responses:
+        '200':
+          description: Account confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Invalid input or confirmation code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login and receive a JWT token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: johndoe
+                password:
+                  type: string
+                  example: Password123!
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  expiresIn:
+                    type: number
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Conversions ─────────────────────────────────────────────────────────────
+
+  /v1/convert/xml-to-json:
+    post:
+      tags:
+        - Conversions
+      summary: Convert XML to JSON
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - xml
+              properties:
+                xml:
+                  type: string
+                  example: '<Invoice><id>INV-001</id></Invoice>'
+      responses:
+        '200':
+          description: Converted JSON object
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid input or malformed XML
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/convert/json-to-xml:
+    post:
+      tags:
+        - Conversions
+      summary: Convert JSON to XML
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - json
+              properties:
+                json:
+                  type: object
+                  example:
+                    Invoice:
+                      id: INV-001
+      responses:
+        '200':
+          description: Converted XML string
+          content:
+            application/xml:
+              schema:
+                type: string
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Invoices v1 ─────────────────────────────────────────────────────────────
+
+  /v1/api/invoices:
+    post:
+      tags:
+        - Invoices
+      summary: Generate an invoice from an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - order
+              properties:
+                order:
+                  $ref: '#/components/schemas/Order'
+      responses:
+        '200':
+          description: Generated invoice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Invoices
+      summary: Get all invoices for the authenticated user
+      responses:
+        '200':
+          description: List of invoices belonging to the authenticated user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invoice'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/api/invoices/{id}:
+    get:
+      tags:
+        - Invoices
+      summary: Get invoice by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        '200':
+          description: Invoice found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          description: Invalid ID format or negative ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Invoice not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/api/invoices/{id}/pdf:
+    get:
+      tags:
+        - Invoices
+      summary: Download invoice as PDF
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        '200':
+          description: PDF file download
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Invoice not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Invoices v2 ─────────────────────────────────────────────────────────────
+
+  /v2/api/invoices:
+    post:
+      tags:
+        - Invoices
+      summary: Generate a Peppol-compliant UBL 2.1 XML invoice
+      description: >
+        Generates a UBL 2.1 invoice formatted for the Peppol network (EN16931).
+        The order must include endpoint IDs for both buyer and seller parties,
+        a 2-letter country code, and a city name. Returns XML directly.
+        Throws PEPPOL_VALIDATION_FAILED (422) if mandatory Peppol fields are missing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - order
+              properties:
+                order:
+                  $ref: '#/components/schemas/PeppolOrder'
+      responses:
+        '200':
+          description: Peppol-compliant UBL 2.1 XML invoice
+          content:
+            application/xml:
+              schema:
+                type: string
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Peppol validation failed — mandatory fields missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v2/api/invoices/filter:
+    get:
+      tags:
+        - Invoices
+      summary: Filter invoices by query parameters
+      description: >
+        Returns invoices belonging to the authenticated user matching the
+        provided filters. All parameters are optional. Dates must be in
+        YYYY-MM-DD format.
+      parameters:
+        - name: invoiceID
+          in: query
+          required: false
+          schema:
+            type: string
+          example: INV-001
+        - name: supplierId
+          in: query
+          required: false
+          schema:
+            type: integer
+          example: 1
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: integer
+          example: 2
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2026-03-01'
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2026-03-31'
+      responses:
+        '200':
+          description: Filtered list of invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invoice'
+        '400':
+          description: Invalid filter parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v2/api/invoices/search:
+    get:
+      tags:
+        - Invoices
+      summary: Search invoices by text query
+      description: >
+        Searches invoices belonging to the authenticated user across invoice ID,
+        supplier/customer party IDs, issue date, and invoice data.
+        Query must be non-empty and under 100 characters.
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+          example: Acme Corp
+          description: >
+            Text to search across invoice fields. If omitted, returns all invoices.
+      responses:
+        '200':
+          description: Matching invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invoice'
+        '400':
+          description: Query is empty or too long
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v2/api/invoices/{id}/translate:
+    post:
+      tags:
+        - Translation
+      summary: Translate an invoice's text fields to a target language
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - targetLanguage
+              properties:
+                targetLanguage:
+                  type: string
+                  example: fr
+      responses:
+        '200':
+          description: Translated invoice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+        '400':
+          description: Invalid ID or missing targetLanguage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Invoice not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Invoices v3 ─────────────────────────────────────────────────────────────
+
+  /v3/api/invoices/{id}:
+    delete:
+      tags:
+        - Invoices
+      summary: Delete an invoice by ID
+      description: >
+        Deletes the invoice with the given ID. Only the user who created the
+        invoice can delete it. Returns 403 if the invoice belongs to another user.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        '200':
+          description: Invoice deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Invoice deleted successfully
+        '400':
+          description: Invalid invoice ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden — invoice belongs to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Invoice not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v3/api/stats:
+    get:
+      tags:
+        - Stats
+      summary: Get document counts for the authenticated user
+      description: >
+        Returns the total number of invoices, credit notes, debit notes,
+        adjustment notes, and application responses created by the
+        authenticated user.
+      responses:
+        '200':
+          description: User statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStats'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Application Responses v1 ────────────────────────────────────────────────
+
+  /v1/api/appResponses:
+    post:
+      tags:
+        - Application Responses
+      summary: Generate an application response for an invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - invoiceId
+                - responseType
+                - remarks
+              properties:
+                invoiceId:
+                  type: integer
+                  example: 1
+                responseType:
+                  type: string
+                  example: accepted
+                remarks:
+                  type: string
+                  example: Invoice verified and accepted.
+      responses:
+        '200':
+          description: Application response generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Invoice not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Application Responses
+      summary: Get all application responses for the authenticated user
+      responses:
+        '200':
+          description: List of application responses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApplicationResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/api/appResponses/{responseId}:
+    get:
+      tags:
+        - Application Responses
+      summary: Get application response by ID
+      parameters:
+        - name: responseId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: '1'
+      responses:
+        '200':
+          description: Application response found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Application response not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Application Responses v2 ────────────────────────────────────────────────
+
+  /v2/api/appResponses/filter:
+    get:
+      tags:
+        - Application Responses
+      summary: Filter application responses by query parameters
+      description: >
+        Returns application responses belonging to the authenticated user
+        matching the provided filters. All parameters are optional.
+      parameters:
+        - name: responseCode
+          in: query
+          required: false
+          schema:
+            type: string
+          example: accepted
+        - name: invoiceId
+          in: query
+          required: false
+          schema:
+            type: integer
+          example: 1
+        - name: senderId
+          in: query
+          required: false
+          schema:
+            type: integer
+          example: 1
+        - name: receiverId
+          in: query
+          required: false
+          schema:
+            type: integer
+          example: 2
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2026-03-01'
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2026-03-31'
+      responses:
+        '200':
+          description: Filtered list of application responses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApplicationResponse'
+        '400':
+          description: Invalid filter parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v2/api/appResponses/search:
+    get:
+      tags:
+        - Application Responses
+      summary: Search application responses by text query
+      description: >
+        Searches application responses belonging to the authenticated user
+        across response data, response codes, document references, and issue date.
+        Query must be non-empty and under 100 characters.
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+          example: accepted
+      responses:
+        '200':
+          description: Matching application responses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApplicationResponse'
+        '400':
+          description: Query is empty or too long
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Adjustment Notes v1 ─────────────────────────────────────────────────────
+
+  /v1/api/adjNotes:
+    post:
+      tags:
+        - Adjustment Notes
+      summary: Create a credit or debit adjustment note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - invoiceIdReference
+                - adjustmentType
+                - amount
+                - reason
+                - lines
+              properties:
+                invoiceIdReference:
+                  type: integer
+                  example: 1
+                adjustmentType:
+                  type: string
+                  enum:
+                    - credit
+                    - debit
+                  example: credit
+                amount:
+                  type: number
+                  example: 505.00
+                reason:
+                  type: string
+                  example: Returned items in good condition
+                lines:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/AdjustmentLineItem'
+      responses:
+        '201':
+          description: Adjustment note created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustmentNote'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Invoice not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Adjustment Notes
+      summary: Get all adjustment notes for the authenticated user
+      responses:
+        '200':
+          description: List of adjustment note summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdjustmentNoteSummary'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/api/adjNotes/{adjNoteId}:
+    get:
+      tags:
+        - Adjustment Notes
+      summary: Get adjustment note by ID
+      parameters:
+        - name: adjNoteId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - credit
+              - debit
+          example: credit
+      responses:
+        '200':
+          description: Adjustment note found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustmentNote'
+        '400':
+          description: Invalid ID format or missing/invalid type parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Adjustment note not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Adjustment Notes v2 ─────────────────────────────────────────────────────
+
+  /v2/api/adjNotes/filter:
+    get:
+      tags:
+        - Adjustment Notes
+      summary: Filter adjustment notes by query parameters
+      description: >
+        Returns adjustment notes belonging to the authenticated user matching
+        the provided filters. All parameters are optional.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - credit
+              - debit
+          example: credit
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2026-03-01'
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          example: '2026-03-31'
+      responses:
+        '200':
+          description: Filtered list of adjustment note summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdjustmentNoteSummary'
+        '400':
+          description: Invalid filter parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v2/api/adjNotes/search:
+    get:
+      tags:
+        - Adjustment Notes
+      summary: Search adjustment notes by text query
+      description: >
+        Searches adjustment notes belonging to the authenticated user across
+        ID, issue date, and type. Query must be non-empty and under 100 characters.
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+          example: credit
+      responses:
+        '200':
+          description: Matching adjustment notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdjustmentNoteSummary'
+        '400':
+          description: Query is empty or too long
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Translation ─────────────────────────────────────────────────────────────
+
+  /v2/translate:
+    post:
+      tags:
+        - Translation
+      summary: Translate arbitrary text to a target language
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+                - targetLanguage
+              properties:
+                text:
+                  type: string
+                  example: Invoice for services rendered
+                targetLanguage:
+                  type: string
+                  example: fr
+      responses:
+        '200':
+          description: Translated text
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  translatedText:
+                    type: string
+        '400':
+          description: Missing text or targetLanguage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Translation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v2/api/creditNotes/{id}/translate:
+    post:
+      tags:
+        - Translation
+      summary: Translate a credit note's text fields to a target language
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - targetLanguage
+              properties:
+                targetLanguage:
+                  type: string
+                  example: fr
+      responses:
+        '200':
+          description: Translated credit note
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustmentNote'
+        '400':
+          description: Invalid ID or missing targetLanguage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Credit note not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v2/api/debitNotes/{id}/translate:
+    post:
+      tags:
+        - Translation
+      summary: Translate a debit note's text fields to a target language
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - targetLanguage
+              properties:
+                targetLanguage:
+                  type: string
+                  example: fr
+      responses:
+        '200':
+          description: Translated debit note
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustmentNote'
+        '400':
+          description: Invalid ID or missing targetLanguage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Debit note not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v2/api/orders/{id}/translate:
+    post:
+      tags:
+        - Translation
+      summary: Translate an order's text fields to a target language
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: order-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - targetLanguage
+              properties:
+                targetLanguage:
+                  type: string
+                  example: fr
+      responses:
+        '200':
+          description: Translated order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid ID or missing targetLanguage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Health ──────────────────────────────────────────────────────────────────
+
+  /v1/health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  uptime:
+                    type: number
+                  timestamp:
+                    type: string
